@@ -1,1 +1,21 @@
+# Configurations: 
 
+      ```
+      - Grafana: “Add Datasource” and the Influxdb parameters.
+      -----------------------------------
+      Name: Influx
+      Type: InfluxBD
+      
+      Http Settings:
+      --------
+      Url: http://localhost:8086
+      Access: *******
+      
+      InfluxDB Details:
+      --------
+      Database: ************
+      User: ***********    ; Password: *******
+      
+      ```
+      
+      
