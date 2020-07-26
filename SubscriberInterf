@@ -1,1 +1,74 @@
+#!/usr/bin/env python3
+
+import datetime
+import time
+import json
+from Crypto.Cipher import AES
+import paho.mqtt.subscribe as subscribe
+import binascii
+import influxdb
+
+# InfluxDB connections settings
+host = '*****'
+port = *****
+user = '*****'
+password = '*****'
+dbname = '****'
+
+# broker connections settings
+topic = "**********"
+broker_url = "*******"
+broker_port = ****
+
+def unpape(val):
+    v = "";
+    code = {"a":"000000","b":"000001","c":"000010","d":"000011","e":"000100","f":"000101","g":"000110","h":"000111","i":"001000","j":"001001","k":"001010","l":"001011","m":"001100","n":"001101","o":"001110","p":"001111","q":"010000","r":"010001","s":"010010","t":"010011","u":"010100","v":"010101","w":"010110","x":"010111","y":"011000","z":"011001","0":"011010","1":"011011","2":"011100","3":"011101","4":"011110","5":"011111","6":"100000","7":"100001","8":"100010","9":"100011","{":"100100","}":"100101","[":"100110","]":"100111","\"":"101000","'":"101001"," ":"101010",":":"101011",".":"101100",",":"101101",";":"101110","_":"101111","(":"110000",")":"110001","-":"110010","*":"110011","+":"110100","/":"110101","\\":"110110","|":"110111","#":"111000","?":"111001","!":"111010","%":"111011","=":"111100",">":"111101","<":"111110","@":"111111"}
+    data = val.replace('0b','')
+    while (len(data)%6 != 0):
+        data = "0" + data
+    data = data.replace(' ','');
+    while data != "":
+        for cle, value in code.items():
+            if(str(data[:6]) == str(value)):
+                v+=str(cle)
+        data = data[6:]
+    return v
+
+def unbarro(data):
+    n=data.decode('ascii'); message = ""
+    for i in n:
+        b = bin(ord(i)).lstrip('0b');
+        while len(b)<7:
+            b="0"+b
+        message += b
+    while len(message)%6 != 0 :
+        message = message[1:]
+    return message
+
+while True:
+    msg = subscribe.simple(topic, hostname=broker_url)
+    data = msg.payload
+    print(str(data))
+    key = b'notsuchsecretkey' # 128 bit (16 bytes) key
+    cipher = AES.new(key, AES.MODE_CFB, data[:16]) # on the decryption side
+    original = cipher.decrypt(data[16:])
+    
+    #current DateTime
+    currentDT = datetime.datetime.now()
+    timer = str(currentDT).replace(' ','T')+"Z" 
+    
+    #uncompressed message
+    message = unpape(unbarro(original))
+    x = "[{\"measurement\":\"data\", \"time\":\""+str(timer)+"\", \"fields\":"+message+"}]"
+    y = json.loads(x)
+    print(y)
+        
+    #Influx authentification
+    cl= influxdb.InfluxDBClient(host, port, user, password, dbname)
+        
+    #insert row 
+    bol = cl.write_points(y)
+    print(bol)
+    time.sleep(5)
+
 
