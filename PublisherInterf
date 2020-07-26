@@ -1,1 +1,97 @@
+import crypto
+from crypto import AES
+import machine
+import network
+from network import WLAN
+from mqtt import MQTTClient
+from machine import Pin
+from dth import DTH
+import time
+import pycom
+import hashlib
+import ubinascii
+
+import ucrypto
+import math
+import ujson
+
+wifi_ssid = "********"
+wifi_passwd = "********"
+
+broker_addr = "********"
+bro = "******"
+th = DTH('P12',0)
+
+pycom.heartbeat(False) # Disable the heartbeat LED
+
+def pape(data):
+    v = "";
+    code = {"a":"000000","b":"000001","c":"000010","d":"000011","e":"000100","f":"000101","g":"000110","h":"000111","i":"001000","j":"001001","k":"001010","l":"001011","m":"001100","n":"001101","o":"001110","p":"001111","q":"010000","r":"010001","s":"010010","t":"010011","u":"010100","v":"010101","w":"010110","x":"010111","y":"011000","z":"011001","0":"011010","1":"011011","2":"011100","3":"011101","4":"011110","5":"011111","6":"100000","7":"100001","8":"100010","9":"100011","{":"100100","}":"100101","[":"100110","]":"100111","\"":"101000","'":"101001"," ":"101010",":":"101011",".":"101100",",":"101101",";":"101110","_":"101111","(":"110000",")":"110001","-":"110010","*":"110011","+":"110100","/":"110101","\\":"110110","|":"110111","#":"111000","?":"111001","!":"111010","%":"111011","=":"111100",">":"111101","<":"111110","@":"111111"}
+    for i in range(len(data)):
+        for cle, value in code.items():
+            if str(data[i]) == str(cle):
+                v+=str(value)
+    return v
+
+def barro(data):
+    #data in bits train
+    n=data; message = "";
+    while (len(n)%7 != 0):
+        n = "0" + n
+    n = n.replace(' ','');
+    while n != "":
+        k=str(n[:7])
+        j = chr(int(k,2))
+        message += j
+        n = n[7:]
+        k=""
+    return message.encode('ascii');
+
+print("-- init --")
+wlan = WLAN(mode=WLAN.STA)
+time.sleep(3)
+nets = wlan.scan()
+for net in nets:
+    if net.ssid == wifi_ssid:
+        print("Network " + wifi_ssid + " found!")
+        wlan.connect(net.ssid, auth=(net.sec, wifi_passwd), timeout=5000)
+        while not wlan.isconnected():
+            machine.idle() # save power while waiting
+        print("WLAN connection succeeded!")
+        print (wlan.ifconfig())
+        break
+print("Connecting to the broker ...")
+client = MQTTClient(bro, broker_addr, 1883)
+if not client.connect():
+    print ("Connected to broker: " + broker_addr)
+print("Sending messages ...")
+
+while True:
+    ## collecting sensors data
+    temphum = th.read()
+    temperature = temphum.temperature
+    humidity = temphum.humidity
+    mac = ubinascii.hexlify(network.WLAN().mac()[0],':').decode()
+    time.sleep(1)
+    data = '{"temperature":'+str(temperature)+',"humidity":'+str(humidity)+',"mac":"'+str(mac)+'"}'
+
+    ## compressing
+    time.sleep(1)
+    compData = barro(pape(data))
+
+    ## crypting the data
+    time.sleep(1)
+    key = b'********' # 128 bit (16 bytes) key
+    iv = crypto.getrandbits(128) # hardware generated random IV (never reuse it)
+    cipher = AES(key, AES.MODE_CFB, iv)
+    msg = iv + cipher.encrypt(compData)
+
+    ## on the decryption side
+    #cipher = AES(key, AES.MODE_CFB, iv)
+    #original = cipher.decrypt(msg)
+
+    ## publishing the data
+    time.sleep(1)
+    client.publish(bro + "/temphum/", msg)
+    time.sleep(5)
 
